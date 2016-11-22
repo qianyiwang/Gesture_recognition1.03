@@ -199,7 +199,7 @@ public class MotionService extends Service implements SensorEventListener{
 
     private boolean checkIfOutside(ArrayList<Float> dataArr, float train_maxAcc){
         for(float f: dataArr){
-            if(f>Math.floor(train_maxAcc)+10){
+            if(f>Math.floor(train_maxAcc)){
                 return false;
             }
         }
