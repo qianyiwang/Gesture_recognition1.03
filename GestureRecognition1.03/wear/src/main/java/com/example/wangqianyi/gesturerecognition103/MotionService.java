@@ -15,6 +15,7 @@ import android.widget.Toast;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Locale;
 
 /**
  * Created by wangqianyi on 2016-11-21.
@@ -35,6 +36,8 @@ public class MotionService extends Service implements SensorEventListener{
     ArrayList<Float> dataArray_acc_x = new ArrayList();
     ArrayList<Float> dataGry = new ArrayList();
 
+    TextToSpeech t1;
+
     @Override
     public void onCreate() {
         super.onCreate();
@@ -44,6 +47,15 @@ public class MotionService extends Service implements SensorEventListener{
         senGyroscope = mSensorManager.getDefaultSensor(Sensor.TYPE_GYROSCOPE);
         mSensorManager.registerListener(this, senAccelerometer , SensorManager.SENSOR_DELAY_FASTEST);//adjust the frequency
         mSensorManager.registerListener(this, senGyroscope , SensorManager.SENSOR_DELAY_FASTEST);//adjust the frequency
+
+        t1=new TextToSpeech(getApplicationContext(), new TextToSpeech.OnInitListener() {
+            @Override
+            public void onInit(int status) {
+                if(status != TextToSpeech.ERROR) {
+                    t1.setLanguage(Locale.US);
+                }
+            }
+        });
     }
 
     @Override
@@ -65,7 +77,7 @@ public class MotionService extends Service implements SensorEventListener{
             float delta = mGryCurrent - mGryLast;
             mGry = mGry * 0.9f + delta; // perform low-cut filter
 
-            if(mGry>=6) {
+            if(mGry>=10) {
                 if (!trigger) {
                     trigger = true;
                     excute();
@@ -113,8 +125,9 @@ public class MotionService extends Service implements SensorEventListener{
         return null;
     }
 
-    public ArrayList findPeaks(ArrayList dataArr){
-        ArrayList peakNum = new ArrayList();
+    private ArrayList findPeaks(ArrayList<Float> dataArr){
+        ArrayList<Float> bigVal = new ArrayList();
+        ArrayList<Float> peakNum = new ArrayList();
 
         for (int i=1; i<dataArr.size(); i++){
 
@@ -123,9 +136,24 @@ public class MotionService extends Service implements SensorEventListener{
                     peakNum.add((float)dataArr.get(i));
                 }
             }
-
         }
-        return peakNum;
+
+        for(float f: peakNum){
+            if(f>10){
+                bigVal.add(f);
+            }
+        }
+        return bigVal;
+    }
+
+    private boolean checkIfOutside(ArrayList<Float> dataArr){
+        for(float f: dataArr){
+            if(f>20){
+                return false;
+            }
+        }
+
+        return true;
     }
 
     public void excute(){
@@ -136,22 +164,31 @@ public class MotionService extends Service implements SensorEventListener{
             public void run() {
                 trigger = false;
                 ArrayList peakNum_gry = new ArrayList();
-                ArrayList peakNum_acc = new ArrayList();
-//                peakNum_gry = findPeaks(dataGry);
-//                peakNum_acc = findPeaks(dataArray_acc_x);
+                peakNum_gry = findPeaks(dataGry);
 
-                if(!dataArray_acc_x.isEmpty()){
-                    float acc_x_min = (float) Collections.min(dataArray_acc_x);
-                    int peakNum = peakNum_gry.size();
-
+                if(peakNum_gry.size()>=2){
+                    if(checkIfOutside(dataArray_acc_x)){
+                        t1.speak("double outside", TextToSpeech.QUEUE_FLUSH, null);
+                    }
+                    else{
+                        t1.speak("double inside", TextToSpeech.QUEUE_FLUSH, null);
+                    }
+                }
+                else{
+                    if(checkIfOutside(dataArray_acc_x)){
+                        t1.speak("single outside", TextToSpeech.QUEUE_FLUSH, null);
+                    }
+                    else{
+                        t1.speak("single inside", TextToSpeech.QUEUE_FLUSH, null);
+                    }
                 }
 
-                for(float f: dataGry){
-                    Log.v("dataGry", String.valueOf(f));
-                }
-                for(float f: dataArray_acc_x){
-                    Log.v("dataArray_acc_x", String.valueOf(f));
-                }
+//                for(float f: dataGry){
+//                    Log.v("dataGry", String.valueOf(f));
+//                }
+//                for(float f: dataArray_acc_x){
+//                    Log.v("dataArray_acc_x", String.valueOf(f));
+//                }
 
                 dataArray_acc_x.clear();
                 dataGry.clear();
