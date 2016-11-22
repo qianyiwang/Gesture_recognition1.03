@@ -11,11 +11,9 @@ import android.os.Handler;
 import android.os.IBinder;
 import android.speech.tts.TextToSpeech;
 import android.support.annotation.Nullable;
-import android.util.Log;
 import android.widget.Toast;
 
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.Locale;
 
 /**
@@ -34,7 +32,7 @@ public class MotionService extends Service implements SensorEventListener{
     private float yAccCurrent; // current acceleration including gravity
     private float yAccLast; // last acceleration including gravity
     boolean trigger = false;
-    ArrayList<Float> dataArray_acc_x = new ArrayList();
+    ArrayList<Float> dataArray_acc_y = new ArrayList();
     ArrayList<Float> dataGry = new ArrayList();
 
     TextToSpeech t1;
@@ -107,7 +105,7 @@ public class MotionService extends Service implements SensorEventListener{
             yAcc = yAcc * 0.9f + delta; // perform low-cut filter
 
             if(trigger){
-                dataArray_acc_x.add(yAcc);
+                dataArray_acc_y.add(yAcc);
             }
 
         }
@@ -173,7 +171,7 @@ public class MotionService extends Service implements SensorEventListener{
         return maxVal;
     }
 
-    private void train(int peakNum, int maxAcc){
+    private void train(int peakNum, float maxAcc){
         float training_maxAcc = training_prefs.getFloat("maxAcc", maxAcc);
         int training_peakNum = training_prefs.getInt("peakNum", peakNum);
         training_maxAcc = (training_maxAcc+maxAcc)/2;
@@ -192,31 +190,34 @@ public class MotionService extends Service implements SensorEventListener{
                 ArrayList peakNum_gry = new ArrayList();
                 peakNum_gry = findPeaks(dataGry);
 
-                if(peakNum_gry.size()>=2){
-                    if(checkIfOutside(dataArray_acc_x)){
-                        t1.speak("double outside", TextToSpeech.QUEUE_FLUSH, null);
-                    }
-                    else{
-                        t1.speak("double inside", TextToSpeech.QUEUE_FLUSH, null);
-                    }
-                }
-                else{
-                    if(checkIfOutside(dataArray_acc_x)){
-                        t1.speak("single outside", TextToSpeech.QUEUE_FLUSH, null);
-                    }
-                    else{
-                        t1.speak("single inside", TextToSpeech.QUEUE_FLUSH, null);
-                    }
-                }
+                float maxVal = findInsideMax(dataArray_acc_y);
+                train(peakNum_gry.size(), maxVal);
+
+//                if(peakNum_gry.size()>=2){
+//                    if(checkIfOutside(dataArray_acc_y)){
+//                        t1.speak("double outside", TextToSpeech.QUEUE_FLUSH, null);
+//                    }
+//                    else{
+//                        t1.speak("double inside", TextToSpeech.QUEUE_FLUSH, null);
+//                    }
+//                }
+//                else{
+//                    if(checkIfOutside(dataArray_acc_y)){
+//                        t1.speak("single outside", TextToSpeech.QUEUE_FLUSH, null);
+//                    }
+//                    else{
+//                        t1.speak("single inside", TextToSpeech.QUEUE_FLUSH, null);
+//                    }
+//                }
 
 //                for(float f: dataGry){
 //                    Log.v("dataGry", String.valueOf(f));
 //                }
-//                for(float f: dataArray_acc_x){
-//                    Log.v("dataArray_acc_x", String.valueOf(f));
+//                for(float f: dataArray_acc_y){
+//                    Log.v("dataArray_acc_y", String.valueOf(f));
 //                }
 
-                dataArray_acc_x.clear();
+                dataArray_acc_y.clear();
                 dataGry.clear();
             }
         }, 1000);
