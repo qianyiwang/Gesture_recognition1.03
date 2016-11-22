@@ -14,4 +14,13 @@
         android:layout_height="wrap_content"
         android:textOn="Training on"
         android:textOff="Training off" />
+
+    <Button
+        android:id="@+id/clearButton"
+        android:layout_below="@+id/togglebutton"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_centerHorizontal="true"
+        android:layout_centerVertical="true"
+        android:text="CLEAR"/>
 </RelativeLayout>
