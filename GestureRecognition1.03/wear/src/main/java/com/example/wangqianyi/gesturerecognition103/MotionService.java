@@ -77,7 +77,7 @@ public class MotionService extends Service implements SensorEventListener{
             float delta = mGryCurrent - mGryLast;
             mGry = mGry * 0.9f + delta; // perform low-cut filter
 
-            if(mGry>=10) {
+            if(mGry>=6) {
                 if (!trigger) {
                     trigger = true;
                     excute();
