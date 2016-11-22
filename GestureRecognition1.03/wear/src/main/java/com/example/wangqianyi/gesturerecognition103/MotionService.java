@@ -2,6 +2,7 @@ package com.example.wangqianyi.gesturerecognition103;
 
 import android.app.Service;
 import android.content.Intent;
+import android.content.SharedPreferences;
 import android.hardware.Sensor;
 import android.hardware.SensorEvent;
 import android.hardware.SensorEventListener;
@@ -37,6 +38,9 @@ public class MotionService extends Service implements SensorEventListener{
     ArrayList<Float> dataGry = new ArrayList();
 
     TextToSpeech t1;
+    SharedPreferences.Editor training_editor;
+    SharedPreferences training_prefs;
+    public static final String TRAINING_FILE = "TrainingFile";
 
     @Override
     public void onCreate() {
@@ -56,6 +60,9 @@ public class MotionService extends Service implements SensorEventListener{
                 }
             }
         });
+
+        training_editor = getSharedPreferences(TRAINING_FILE, MODE_PRIVATE).edit();
+        training_prefs = getSharedPreferences(TRAINING_FILE, MODE_PRIVATE);
     }
 
     @Override
@@ -77,7 +84,7 @@ public class MotionService extends Service implements SensorEventListener{
             float delta = mGryCurrent - mGryLast;
             mGry = mGry * 0.9f + delta; // perform low-cut filter
 
-            if(mGry>=6) {
+            if(mGry>=10) {
                 if (!trigger) {
                     trigger = true;
                     excute();
@@ -154,6 +161,25 @@ public class MotionService extends Service implements SensorEventListener{
         }
 
         return true;
+    }
+
+    private float findInsideMax(ArrayList<Float> dataArr){
+        float maxVal = dataArr.get(0);
+        for(float f: dataArr){
+            if(f>=maxVal){
+                maxVal = f;
+            }
+        }
+        return maxVal;
+    }
+
+    private void train(int peakNum, int maxAcc){
+        float training_maxAcc = training_prefs.getFloat("maxAcc", maxAcc);
+        int training_peakNum = training_prefs.getInt("peakNum", peakNum);
+        training_maxAcc = (training_maxAcc+maxAcc)/2;
+        training_peakNum = (training_peakNum+peakNum)/2;
+        training_editor.putFloat("maxAcc", training_maxAcc).commit();
+        training_editor.putInt("peakNum", training_peakNum).commit();
     }
 
     public void excute(){
