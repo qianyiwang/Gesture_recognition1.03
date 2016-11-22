@@ -1,7 +1,11 @@
 package com.example.wangqianyi.gesturerecognition103;
 
 import android.app.Service;
+import android.content.BroadcastReceiver;
+import android.content.Context;
 import android.content.Intent;
+import android.content.IntentFilter;
+import android.content.SharedPreferences;
 import android.hardware.Sensor;
 import android.hardware.SensorEvent;
 import android.hardware.SensorEventListener;
@@ -14,7 +18,6 @@ import android.util.Log;
 import android.widget.Toast;
 
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.Locale;
 
 /**
@@ -33,10 +36,16 @@ public class MotionService extends Service implements SensorEventListener{
     private float yAccCurrent; // current acceleration including gravity
     private float yAccLast; // last acceleration including gravity
     boolean trigger = false;
-    ArrayList<Float> dataArray_acc_x = new ArrayList();
+    ArrayList<Float> dataArray_acc_y = new ArrayList();
     ArrayList<Float> dataGry = new ArrayList();
 
     TextToSpeech t1;
+    SharedPreferences.Editor training_editor;
+    SharedPreferences training_prefs;
+    public static final String TRAINING_FILE = "TrainingFile";
+
+    BroadcastReceiver broadcastReceiver;
+    boolean training_toggle = false;
 
     @Override
     public void onCreate() {
@@ -56,12 +65,25 @@ public class MotionService extends Service implements SensorEventListener{
                 }
             }
         });
+
+        training_editor = getSharedPreferences(TRAINING_FILE, MODE_PRIVATE).edit();
+        training_prefs = getSharedPreferences(TRAINING_FILE, MODE_PRIVATE);
+
+        broadcastReceiver = new BroadcastReceiver() {
+            @Override
+            public void onReceive(Context context, Intent intent) {
+                training_toggle = intent.getBooleanExtra("training_toggle",false);
+                Log.v("training_toggle", String.valueOf(training_toggle));
+            }
+        };
+        registerReceiver(broadcastReceiver, new IntentFilter(MainApp.BROADCAST_ACTION));
     }
 
     @Override
     public void onDestroy() {
         super.onDestroy();
         mSensorManager.unregisterListener(this);
+        unregisterReceiver(broadcastReceiver);
         Toast.makeText(this,"stop motion service",0).show();
     }
 
@@ -100,7 +122,7 @@ public class MotionService extends Service implements SensorEventListener{
             yAcc = yAcc * 0.9f + delta; // perform low-cut filter
 
             if(trigger){
-                dataArray_acc_x.add(yAcc);
+                dataArray_acc_y.add(yAcc);
             }
 
         }
@@ -146,14 +168,33 @@ public class MotionService extends Service implements SensorEventListener{
         return bigVal;
     }
 
-    private boolean checkIfOutside(ArrayList<Float> dataArr){
+    private boolean checkIfOutside(ArrayList<Float> dataArr, float train_maxAcc){
         for(float f: dataArr){
-            if(f>20){
+            if(f>train_maxAcc){
                 return false;
             }
         }
 
         return true;
+    }
+
+    private float findInsideMax(ArrayList<Float> dataArr){
+        float maxVal = dataArr.get(0);
+        for(float f: dataArr){
+            if(f>=maxVal){
+                maxVal = f;
+            }
+        }
+        return maxVal;
+    }
+
+    private void train(int peakNum, float maxAcc, int training_peakNum, float training_maxAcc){
+
+        training_maxAcc = (training_maxAcc+maxAcc)/2;
+        training_peakNum = (training_peakNum+peakNum)/2;
+        t1.speak("max acc is "+training_maxAcc+ "peak number is "+training_peakNum, TextToSpeech.QUEUE_FLUSH, null);
+        training_editor.putFloat("maxAcc", training_maxAcc).commit();
+        training_editor.putInt("peakNum", training_peakNum).commit();
     }
 
     public void excute(){
@@ -166,31 +207,40 @@ public class MotionService extends Service implements SensorEventListener{
                 ArrayList peakNum_gry = new ArrayList();
                 peakNum_gry = findPeaks(dataGry);
 
-                if(peakNum_gry.size()>=2){
-                    if(checkIfOutside(dataArray_acc_x)){
-                        t1.speak("double outside", TextToSpeech.QUEUE_FLUSH, null);
-                    }
-                    else{
-                        t1.speak("double inside", TextToSpeech.QUEUE_FLUSH, null);
-                    }
+                float maxVal = findInsideMax(dataArray_acc_y);
+                float training_maxAcc = training_prefs.getFloat("maxAcc", 20);
+                int training_peakNum = training_prefs.getInt("peakNum", 1);
+
+                if(training_toggle){
+                    train(peakNum_gry.size(), maxVal, training_peakNum, training_maxAcc);
                 }
                 else{
-                    if(checkIfOutside(dataArray_acc_x)){
-                        t1.speak("single outside", TextToSpeech.QUEUE_FLUSH, null);
+                    if(peakNum_gry.size()>training_peakNum){
+                        if(checkIfOutside(dataArray_acc_y, training_maxAcc)){
+                            t1.speak("double outside", TextToSpeech.QUEUE_FLUSH, null);
+                        }
+                        else{
+                            t1.speak("double inside", TextToSpeech.QUEUE_FLUSH, null);
+                        }
                     }
                     else{
-                        t1.speak("single inside", TextToSpeech.QUEUE_FLUSH, null);
+                        if(checkIfOutside(dataArray_acc_y, training_maxAcc)){
+                            t1.speak("single outside", TextToSpeech.QUEUE_FLUSH, null);
+                        }
+                        else{
+                            t1.speak("single inside", TextToSpeech.QUEUE_FLUSH, null);
+                        }
                     }
                 }
 
 //                for(float f: dataGry){
 //                    Log.v("dataGry", String.valueOf(f));
 //                }
-//                for(float f: dataArray_acc_x){
-//                    Log.v("dataArray_acc_x", String.valueOf(f));
+//                for(float f: dataArray_acc_y){
+//                    Log.v("dataArray_acc_y", String.valueOf(f));
 //                }
 
-                dataArray_acc_x.clear();
+                dataArray_acc_y.clear();
                 dataGry.clear();
             }
         }, 1000);
