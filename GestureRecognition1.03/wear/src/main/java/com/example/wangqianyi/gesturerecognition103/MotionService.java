@@ -139,7 +139,7 @@ public class MotionService extends Service implements SensorEventListener{
         }
 
         for(float f: peakNum){
-            if(f>10){
+            if(f>5){
                 bigVal.add(f);
             }
         }
