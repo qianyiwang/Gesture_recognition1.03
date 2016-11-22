@@ -168,9 +168,9 @@ public class MotionService extends Service implements SensorEventListener{
         return bigVal;
     }
 
-    private boolean checkIfOutside(ArrayList<Float> dataArr){
+    private boolean checkIfOutside(ArrayList<Float> dataArr, float train_maxAcc){
         for(float f: dataArr){
-            if(f>20){
+            if(f>train_maxAcc){
                 return false;
             }
         }
@@ -188,11 +188,11 @@ public class MotionService extends Service implements SensorEventListener{
         return maxVal;
     }
 
-    private void train(int peakNum, float maxAcc){
-        float training_maxAcc = training_prefs.getFloat("maxAcc", maxAcc);
-        int training_peakNum = training_prefs.getInt("peakNum", peakNum);
+    private void train(int peakNum, float maxAcc, int training_peakNum, float training_maxAcc){
+
         training_maxAcc = (training_maxAcc+maxAcc)/2;
         training_peakNum = (training_peakNum+peakNum)/2;
+        t1.speak("max acc is "+training_maxAcc+ "peak number is "+training_peakNum, TextToSpeech.QUEUE_FLUSH, null);
         training_editor.putFloat("maxAcc", training_maxAcc).commit();
         training_editor.putInt("peakNum", training_peakNum).commit();
     }
@@ -208,12 +208,15 @@ public class MotionService extends Service implements SensorEventListener{
                 peakNum_gry = findPeaks(dataGry);
 
                 float maxVal = findInsideMax(dataArray_acc_y);
+                float training_maxAcc = training_prefs.getFloat("maxAcc", maxVal);
+                int training_peakNum = training_prefs.getInt("peakNum", peakNum_gry.size());
+
                 if(training_toggle){
-                    train(peakNum_gry.size(), maxVal);
+                    train(peakNum_gry.size(), maxVal, training_peakNum, training_maxAcc);
                 }
                 else{
-                    if(peakNum_gry.size()>=2){
-                        if(checkIfOutside(dataArray_acc_y)){
+                    if(peakNum_gry.size()>=training_peakNum){
+                        if(checkIfOutside(dataArray_acc_y, training_maxAcc)){
                             t1.speak("double outside", TextToSpeech.QUEUE_FLUSH, null);
                         }
                         else{
@@ -221,7 +224,7 @@ public class MotionService extends Service implements SensorEventListener{
                         }
                     }
                     else{
-                        if(checkIfOutside(dataArray_acc_y)){
+                        if(checkIfOutside(dataArray_acc_y, training_maxAcc)){
                             t1.speak("single outside", TextToSpeech.QUEUE_FLUSH, null);
                         }
                         else{
