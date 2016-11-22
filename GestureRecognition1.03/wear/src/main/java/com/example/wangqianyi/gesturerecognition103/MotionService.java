@@ -99,7 +99,7 @@ public class MotionService extends Service implements SensorEventListener{
             float delta = mGryCurrent - mGryLast;
             mGry = mGry * 0.9f + delta; // perform low-cut filter
 
-            if(mGry>=10) {
+            if(mGry>=6) {
                 if (!trigger) {
                     trigger = true;
                     excute();
@@ -208,14 +208,14 @@ public class MotionService extends Service implements SensorEventListener{
                 peakNum_gry = findPeaks(dataGry);
 
                 float maxVal = findInsideMax(dataArray_acc_y);
-                float training_maxAcc = training_prefs.getFloat("maxAcc", maxVal);
-                int training_peakNum = training_prefs.getInt("peakNum", peakNum_gry.size());
+                float training_maxAcc = training_prefs.getFloat("maxAcc", 20);
+                int training_peakNum = training_prefs.getInt("peakNum", 1);
 
                 if(training_toggle){
                     train(peakNum_gry.size(), maxVal, training_peakNum, training_maxAcc);
                 }
                 else{
-                    if(peakNum_gry.size()>=training_peakNum){
+                    if(peakNum_gry.size()>training_peakNum){
                         if(checkIfOutside(dataArray_acc_y, training_maxAcc)){
                             t1.speak("double outside", TextToSpeech.QUEUE_FLUSH, null);
                         }
