@@ -1,7 +1,10 @@
 package com.example.wangqianyi.gesturerecognition103;
 
 import android.app.Service;
+import android.content.BroadcastReceiver;
+import android.content.Context;
 import android.content.Intent;
+import android.content.IntentFilter;
 import android.content.SharedPreferences;
 import android.hardware.Sensor;
 import android.hardware.SensorEvent;
@@ -11,6 +14,7 @@ import android.os.Handler;
 import android.os.IBinder;
 import android.speech.tts.TextToSpeech;
 import android.support.annotation.Nullable;
+import android.util.Log;
 import android.widget.Toast;
 
 import java.util.ArrayList;
@@ -40,6 +44,9 @@ public class MotionService extends Service implements SensorEventListener{
     SharedPreferences training_prefs;
     public static final String TRAINING_FILE = "TrainingFile";
 
+    BroadcastReceiver broadcastReceiver;
+    boolean training_toggle = false;
+
     @Override
     public void onCreate() {
         super.onCreate();
@@ -61,12 +68,22 @@ public class MotionService extends Service implements SensorEventListener{
 
         training_editor = getSharedPreferences(TRAINING_FILE, MODE_PRIVATE).edit();
         training_prefs = getSharedPreferences(TRAINING_FILE, MODE_PRIVATE);
+
+        broadcastReceiver = new BroadcastReceiver() {
+            @Override
+            public void onReceive(Context context, Intent intent) {
+                training_toggle = intent.getBooleanExtra("training_toggle",false);
+                Log.v("training_toggle", String.valueOf(training_toggle));
+            }
+        };
+        registerReceiver(broadcastReceiver, new IntentFilter(MainApp.BROADCAST_ACTION));
     }
 
     @Override
     public void onDestroy() {
         super.onDestroy();
         mSensorManager.unregisterListener(this);
+        unregisterReceiver(broadcastReceiver);
         Toast.makeText(this,"stop motion service",0).show();
     }
 
@@ -191,24 +208,27 @@ public class MotionService extends Service implements SensorEventListener{
                 peakNum_gry = findPeaks(dataGry);
 
                 float maxVal = findInsideMax(dataArray_acc_y);
-                train(peakNum_gry.size(), maxVal);
-
-//                if(peakNum_gry.size()>=2){
-//                    if(checkIfOutside(dataArray_acc_y)){
-//                        t1.speak("double outside", TextToSpeech.QUEUE_FLUSH, null);
-//                    }
-//                    else{
-//                        t1.speak("double inside", TextToSpeech.QUEUE_FLUSH, null);
-//                    }
-//                }
-//                else{
-//                    if(checkIfOutside(dataArray_acc_y)){
-//                        t1.speak("single outside", TextToSpeech.QUEUE_FLUSH, null);
-//                    }
-//                    else{
-//                        t1.speak("single inside", TextToSpeech.QUEUE_FLUSH, null);
-//                    }
-//                }
+                if(training_toggle){
+                    train(peakNum_gry.size(), maxVal);
+                }
+                else{
+                    if(peakNum_gry.size()>=2){
+                        if(checkIfOutside(dataArray_acc_y)){
+                            t1.speak("double outside", TextToSpeech.QUEUE_FLUSH, null);
+                        }
+                        else{
+                            t1.speak("double inside", TextToSpeech.QUEUE_FLUSH, null);
+                        }
+                    }
+                    else{
+                        if(checkIfOutside(dataArray_acc_y)){
+                            t1.speak("single outside", TextToSpeech.QUEUE_FLUSH, null);
+                        }
+                        else{
+                            t1.speak("single inside", TextToSpeech.QUEUE_FLUSH, null);
+                        }
+                    }
+                }
 
 //                for(float f: dataGry){
 //                    Log.v("dataGry", String.valueOf(f));

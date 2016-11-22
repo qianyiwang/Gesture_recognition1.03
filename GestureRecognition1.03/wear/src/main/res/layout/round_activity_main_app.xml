@@ -6,11 +6,12 @@
     tools:context="com.example.wangqianyi.gesturerecognition103.MainApp"
     tools:deviceIds="wear_round">
 
-    <TextView
-        android:id="@+id/text"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
+    <ToggleButton
+        android:id="@+id/togglebutton"
         android:layout_centerHorizontal="true"
         android:layout_centerVertical="true"
-        android:text="@string/hello_round" />
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:textOn="Training on"
+        android:textOff="Training off" />
 </RelativeLayout>
