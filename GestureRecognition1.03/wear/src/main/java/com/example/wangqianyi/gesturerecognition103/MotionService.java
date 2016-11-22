@@ -18,6 +18,7 @@ import android.util.Log;
 import android.widget.Toast;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Locale;
 
 /**
@@ -147,7 +148,7 @@ public class MotionService extends Service implements SensorEventListener{
         return null;
     }
 
-    private ArrayList findPeaks(ArrayList<Float> dataArr){
+    private ArrayList findPeaks(ArrayList<Float> dataArr, float peakThresh){
         ArrayList<Float> bigVal = new ArrayList();
         ArrayList<Float> peakNum = new ArrayList();
 
@@ -161,16 +162,44 @@ public class MotionService extends Service implements SensorEventListener{
         }
 
         for(float f: peakNum){
-            if(f>5){
+            if(f>peakThresh){
                 bigVal.add(f);
             }
         }
         return bigVal;
     }
 
+    private float findPeakThreshold(ArrayList<Float> dataArr){
+        float thresh = 0;
+        ArrayList<Float> peakNum = new ArrayList();
+
+        for (int i=1; i<dataArr.size(); i++){
+            if(i<dataArr.size()-1){
+                if((float)dataArr.get(i)>(float)dataArr.get(i-1)&&(float)dataArr.get(i)>(float)dataArr.get(i+1)){
+                    peakNum.add((float)dataArr.get(i));
+                }
+            }
+        }
+
+        //sorting
+        for(int i=0; i<peakNum.size(); i++){
+            for(int j=i+1; j<peakNum.size(); j++){
+                if(peakNum.get(i)<peakNum.get(j)){
+                    float temp = peakNum.get(i);
+                    peakNum.set(i, peakNum.get(j));
+                    peakNum.set(j, temp);
+                }
+            }
+        }
+
+        thresh = (peakNum.get(0)+peakNum.get(1))/2;
+
+        return thresh;
+    }
+
     private boolean checkIfOutside(ArrayList<Float> dataArr, float train_maxAcc){
         for(float f: dataArr){
-            if(f>train_maxAcc){
+            if(f>Math.floor(train_maxAcc)+10){
                 return false;
             }
         }
@@ -178,7 +207,7 @@ public class MotionService extends Service implements SensorEventListener{
         return true;
     }
 
-    private float findInsideMax(ArrayList<Float> dataArr){
+    private float findOutsideMax(ArrayList<Float> dataArr){
         float maxVal = dataArr.get(0);
         for(float f: dataArr){
             if(f>=maxVal){
@@ -188,13 +217,13 @@ public class MotionService extends Service implements SensorEventListener{
         return maxVal;
     }
 
-    private void train(int peakNum, float maxAcc, int training_peakNum, float training_maxAcc){
+    private void train(float peakNumThresh, float maxAcc, float training_peakNumThresh, float training_maxAcc){
 
         training_maxAcc = (training_maxAcc+maxAcc)/2;
-        training_peakNum = (training_peakNum+peakNum)/2;
-        t1.speak("max acc is "+training_maxAcc+ "peak number is "+training_peakNum, TextToSpeech.QUEUE_FLUSH, null);
+        training_peakNumThresh = (training_peakNumThresh+peakNumThresh)/2;
+        t1.speak("max acc is "+training_maxAcc+ "peak threshold is "+training_peakNumThresh, TextToSpeech.QUEUE_FLUSH, null);
         training_editor.putFloat("maxAcc", training_maxAcc).commit();
-        training_editor.putInt("peakNum", training_peakNum).commit();
+        training_editor.putFloat("peakNumThresh", training_peakNumThresh).commit();
     }
 
     public void excute(){
@@ -205,17 +234,18 @@ public class MotionService extends Service implements SensorEventListener{
             public void run() {
                 trigger = false;
                 ArrayList peakNum_gry = new ArrayList();
-                peakNum_gry = findPeaks(dataGry);
 
-                float maxVal = findInsideMax(dataArray_acc_y);
                 float training_maxAcc = training_prefs.getFloat("maxAcc", 20);
-                int training_peakNum = training_prefs.getInt("peakNum", 1);
+                float training_peakNumThresh = training_prefs.getFloat("peakNumThresh", 5);
 
+                peakNum_gry = findPeaks(dataGry, training_peakNumThresh);
                 if(training_toggle){
-                    train(peakNum_gry.size(), maxVal, training_peakNum, training_maxAcc);
+                    float peakNumThresh = findPeakThreshold(dataGry);
+                    float maxVal = findOutsideMax(dataArray_acc_y);
+                    train(peakNumThresh, maxVal, training_peakNumThresh, training_maxAcc);
                 }
                 else{
-                    if(peakNum_gry.size()>training_peakNum){
+                    if(peakNum_gry.size()>=2){
                         if(checkIfOutside(dataArray_acc_y, training_maxAcc)){
                             t1.speak("double outside", TextToSpeech.QUEUE_FLUSH, null);
                         }
