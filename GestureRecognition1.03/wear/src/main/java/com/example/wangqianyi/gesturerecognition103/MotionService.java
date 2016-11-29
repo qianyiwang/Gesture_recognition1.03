@@ -20,6 +20,15 @@ import android.widget.Toast;
 import java.util.ArrayList;
 import java.util.Locale;
 
+import weka.classifiers.Classifier;
+import weka.classifiers.Evaluation;
+import weka.classifiers.trees.J48;
+import weka.core.Attribute;
+import weka.core.DenseInstance;
+import weka.core.FastVector;
+import weka.core.Instance;
+import weka.core.Instances;
+
 /**
  * Created by wangqianyi on 2016-11-21.
  */
@@ -40,12 +49,17 @@ public class MotionService extends Service implements SensorEventListener{
     ArrayList<Float> dataGry = new ArrayList();
 
     TextToSpeech t1;
-    SharedPreferences.Editor training_editor;
-    SharedPreferences training_prefs;
+//    SharedPreferences.Editor training_editor;
+//    SharedPreferences training_prefs;
     public static final String TRAINING_FILE = "TrainingFile";
 
     BroadcastReceiver broadcastReceiver;
     boolean training_toggle = false;
+
+    // weka variable
+    Attribute peakNum, maxAccY, classAttribute;
+    FastVector fvClassVal, fvWekaAttributes;
+    int trainIdx = 0;
 
     @Override
     public void onCreate() {
@@ -66,8 +80,8 @@ public class MotionService extends Service implements SensorEventListener{
             }
         });
 
-        training_editor = getSharedPreferences(TRAINING_FILE, MODE_PRIVATE).edit();
-        training_prefs = getSharedPreferences(TRAINING_FILE, MODE_PRIVATE);
+//        training_editor = getSharedPreferences(TRAINING_FILE, MODE_PRIVATE).edit();
+//        training_prefs = getSharedPreferences(TRAINING_FILE, MODE_PRIVATE);
 
         broadcastReceiver = new BroadcastReceiver() {
             @Override
@@ -77,6 +91,22 @@ public class MotionService extends Service implements SensorEventListener{
             }
         };
         registerReceiver(broadcastReceiver, new IntentFilter(MainApp.BROADCAST_ACTION));
+
+        // declare attributes
+        peakNum = new Attribute("peak number");
+        maxAccY = new Attribute("max accY");
+        // declare class attribute
+        fvClassVal = new FastVector(4);
+        fvClassVal.addElement("single outside");
+        fvClassVal.addElement("single inside");
+        fvClassVal.addElement("double outside");
+        fvClassVal.addElement("double inside");
+        classAttribute = new Attribute("theClass", fvClassVal);
+        // declare the feature vector
+        fvWekaAttributes = new FastVector(3);
+        fvWekaAttributes.addElement(peakNum);
+        fvWekaAttributes.addElement(maxAccY);
+        fvWekaAttributes.addElement(classAttribute);
     }
 
     @Override
@@ -147,7 +177,7 @@ public class MotionService extends Service implements SensorEventListener{
         return null;
     }
 
-    private ArrayList findPeaks(ArrayList<Float> dataArr){
+    private int findPeaks(ArrayList<Float> dataArr){
         ArrayList<Float> bigVal = new ArrayList();
         ArrayList<Float> peakNum = new ArrayList();
 
@@ -165,36 +195,73 @@ public class MotionService extends Service implements SensorEventListener{
                 bigVal.add(f);
             }
         }
+        return bigVal.size();
+    }
+
+    private float findMax(ArrayList<Float> dataArr){
+        float bigVal = dataArr.get(0);
+        for(float f: dataArr){
+            if(f>bigVal){
+                bigVal = f;
+            }
+        }
+
         return bigVal;
     }
 
-    private boolean checkIfOutside(ArrayList<Float> dataArr, float train_maxAcc){
-        for(float f: dataArr){
-            if(f>train_maxAcc){
-                return false;
-            }
+
+    private void train() throws Exception{
+        Instances trainingSet = new Instances("Rel", fvWekaAttributes, 10);
+        trainingSet.setClassIndex(2);
+        // create the instance
+        Instance tempInstance = new DenseInstance(3);
+        tempInstance.setValue((Attribute)fvWekaAttributes.elementAt(0),findPeaks(dataGry));
+        tempInstance.setValue((Attribute)fvWekaAttributes.elementAt(1),findMax(dataArray_acc_y));
+        switch (trainIdx){
+            case 0:
+                tempInstance.setValue((Attribute)fvWekaAttributes.elementAt(1),"single outside");
+                break;
+            case 1:
+                tempInstance.setValue((Attribute)fvWekaAttributes.elementAt(1),"single inside");
+                break;
+            case 2:
+                tempInstance.setValue((Attribute)fvWekaAttributes.elementAt(1),"double outside");
+                break;
+            case 3:
+                tempInstance.setValue((Attribute)fvWekaAttributes.elementAt(1),"single inside");
+                break;
         }
 
-        return true;
-    }
+        trainingSet.add(tempInstance);
 
-    private float findInsideMax(ArrayList<Float> dataArr){
-        float maxVal = dataArr.get(0);
-        for(float f: dataArr){
-            if(f>=maxVal){
-                maxVal = f;
-            }
+        // create a classifier
+        Classifier model = new J48();
+        model.buildClassifier(trainingSet);
+
+        t1.speak("training set "+trainIdx+" completed", TextToSpeech.QUEUE_FLUSH, null);
+
+        if(trainIdx<3){
+            trainIdx++;
         }
-        return maxVal;
+        else{
+            trainIdx=0;
+            weka.core.SerializationHelper.write(TRAINING_FILE, model);
+        }
+
     }
 
-    private void train(int peakNum, float maxAcc, int training_peakNum, float training_maxAcc){
-
-        training_maxAcc = (training_maxAcc+maxAcc)/2;
-        training_peakNum = (training_peakNum+peakNum)/2;
-        t1.speak("max acc is "+training_maxAcc+ "peak number is "+training_peakNum, TextToSpeech.QUEUE_FLUSH, null);
-        training_editor.putFloat("maxAcc", training_maxAcc).commit();
-        training_editor.putInt("peakNum", training_peakNum).commit();
+    private void test() throws Exception{
+        Classifier model = (Classifier) weka.core.SerializationHelper.read(TRAINING_FILE);
+        // generate the test set
+        Instances testSet = new Instances("Rel", fvWekaAttributes, 10);
+//        testSet.setClassIndex(2);
+        // create the instance
+        Instance tempInstance = new DenseInstance(3);
+        tempInstance.setValue((Attribute)fvWekaAttributes.elementAt(0),findPeaks(dataGry));
+        tempInstance.setValue((Attribute)fvWekaAttributes.elementAt(1),findMax(dataArray_acc_y));
+        Evaluation eTest = new Evaluation(testSet);
+        String strSummary = eTest.toSummaryString();
+        Toast.makeText(getApplicationContext(),strSummary,0).show();
     }
 
     public void excute(){
@@ -204,42 +271,20 @@ public class MotionService extends Service implements SensorEventListener{
             @Override
             public void run() {
                 trigger = false;
-                ArrayList peakNum_gry = new ArrayList();
-                peakNum_gry = findPeaks(dataGry);
-
-                float maxVal = findInsideMax(dataArray_acc_y);
-                float training_maxAcc = training_prefs.getFloat("maxAcc", 20);
-                int training_peakNum = training_prefs.getInt("peakNum", 1);
-
                 if(training_toggle){
-                    train(peakNum_gry.size(), maxVal, training_peakNum, training_maxAcc);
+                    try {
+                        train();
+                    } catch (Exception e) {
+                        e.printStackTrace();
+                    }
                 }
                 else{
-                    if(peakNum_gry.size()>training_peakNum){
-                        if(checkIfOutside(dataArray_acc_y, training_maxAcc)){
-                            t1.speak("double outside", TextToSpeech.QUEUE_FLUSH, null);
-                        }
-                        else{
-                            t1.speak("double inside", TextToSpeech.QUEUE_FLUSH, null);
-                        }
-                    }
-                    else{
-                        if(checkIfOutside(dataArray_acc_y, training_maxAcc)){
-                            t1.speak("single outside", TextToSpeech.QUEUE_FLUSH, null);
-                        }
-                        else{
-                            t1.speak("single inside", TextToSpeech.QUEUE_FLUSH, null);
-                        }
+                    try {
+                        test();
+                    } catch (Exception e) {
+                        e.printStackTrace();
                     }
                 }
-
-//                for(float f: dataGry){
-//                    Log.v("dataGry", String.valueOf(f));
-//                }
-//                for(float f: dataArray_acc_y){
-//                    Log.v("dataArray_acc_y", String.valueOf(f));
-//                }
-
                 dataArray_acc_y.clear();
                 dataGry.clear();
             }

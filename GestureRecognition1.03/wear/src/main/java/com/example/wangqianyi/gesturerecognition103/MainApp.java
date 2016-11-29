@@ -20,8 +20,8 @@ public class MainApp extends Activity {
     public static final String BROADCAST_ACTION = "net.qianyiw.broadcast.mainapp";
     Intent intent;
     TextToSpeech t1;
-    SharedPreferences.Editor training_editor;
-    public static final String TRAINING_FILE = "TrainingFile";
+//    SharedPreferences.Editor training_editor;
+//    public static final String TRAINING_FILE = "TrainingFile";
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -40,7 +40,7 @@ public class MainApp extends Activity {
                 }
             }
         });
-        training_editor = getSharedPreferences(TRAINING_FILE, MODE_PRIVATE).edit();
+//        training_editor = getSharedPreferences(TRAINING_FILE, MODE_PRIVATE).edit();
     }
 
     @Override
@@ -65,8 +65,8 @@ public class MainApp extends Activity {
         clearButton.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
-                training_editor.clear().commit();
-                t1.speak("you have cleared all training result", TextToSpeech.QUEUE_FLUSH, null);
+//                training_editor.clear().commit();
+//                t1.speak("you have cleared all training result", TextToSpeech.QUEUE_FLUSH, null);
             }
         });
     }
