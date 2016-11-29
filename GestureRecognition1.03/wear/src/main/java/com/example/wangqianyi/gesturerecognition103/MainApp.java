@@ -54,7 +54,7 @@ public class MainApp extends Activity {
                 if (isChecked) {
                     intent.putExtra("training_toggle", true);
                     sendBroadcast(intent);
-                    t1.speak("please do single inside to train", TextToSpeech.QUEUE_FLUSH, null);
+//                    t1.speak("please do single inside to train", TextToSpeech.QUEUE_FLUSH, null);
                 } else {
                     intent.putExtra("training_toggle", false);
                     sendBroadcast(intent);

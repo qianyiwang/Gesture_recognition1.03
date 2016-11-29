@@ -59,6 +59,7 @@ public class MotionService extends Service implements SensorEventListener{
     // weka variable
     Attribute peakNum, maxAccY, classAttribute;
     FastVector fvClassVal, fvWekaAttributes;
+    Instances trainingSet;
     int trainIdx = 0;
 
     @Override
@@ -107,6 +108,9 @@ public class MotionService extends Service implements SensorEventListener{
         fvWekaAttributes.addElement(peakNum);
         fvWekaAttributes.addElement(maxAccY);
         fvWekaAttributes.addElement(classAttribute);
+        // declare the training set
+        trainingSet = new Instances("Rel", fvWekaAttributes, 10);
+        trainingSet.setClassIndex(2);
     }
 
     @Override
@@ -129,7 +133,7 @@ public class MotionService extends Service implements SensorEventListener{
             float delta = mGryCurrent - mGryLast;
             mGry = mGry * 0.9f + delta; // perform low-cut filter
 
-            if(mGry>=6) {
+            if(mGry>=10) {
                 if (!trigger) {
                     trigger = true;
                     excute();
@@ -211,32 +215,27 @@ public class MotionService extends Service implements SensorEventListener{
 
 
     private void train() throws Exception{
-        Instances trainingSet = new Instances("Rel", fvWekaAttributes, 10);
-        trainingSet.setClassIndex(2);
+
         // create the instance
         Instance tempInstance = new DenseInstance(3);
         tempInstance.setValue((Attribute)fvWekaAttributes.elementAt(0),findPeaks(dataGry));
         tempInstance.setValue((Attribute)fvWekaAttributes.elementAt(1),findMax(dataArray_acc_y));
         switch (trainIdx){
             case 0:
-                tempInstance.setValue((Attribute)fvWekaAttributes.elementAt(1),"single outside");
+                tempInstance.setValue((Attribute)fvWekaAttributes.elementAt(2),"single outside");
                 break;
             case 1:
-                tempInstance.setValue((Attribute)fvWekaAttributes.elementAt(1),"single inside");
+                tempInstance.setValue((Attribute)fvWekaAttributes.elementAt(2),"single inside");
                 break;
             case 2:
-                tempInstance.setValue((Attribute)fvWekaAttributes.elementAt(1),"double outside");
+                tempInstance.setValue((Attribute)fvWekaAttributes.elementAt(2),"double outside");
                 break;
             case 3:
-                tempInstance.setValue((Attribute)fvWekaAttributes.elementAt(1),"single inside");
+                tempInstance.setValue((Attribute)fvWekaAttributes.elementAt(2),"single inside");
                 break;
         }
 
         trainingSet.add(tempInstance);
-
-        // create a classifier
-        Classifier model = new J48();
-        model.buildClassifier(trainingSet);
 
         t1.speak("training set "+trainIdx+" completed", TextToSpeech.QUEUE_FLUSH, null);
 
@@ -245,7 +244,12 @@ public class MotionService extends Service implements SensorEventListener{
         }
         else{
             trainIdx=0;
+            // create a classifier
+            Classifier model = new J48();
+            model.buildClassifier(trainingSet);
             weka.core.SerializationHelper.write(TRAINING_FILE, model);
+            t1.speak("training complete", TextToSpeech.QUEUE_FLUSH, null);
+            trainingSet.clear();
         }
 
     }
@@ -254,14 +258,14 @@ public class MotionService extends Service implements SensorEventListener{
         Classifier model = (Classifier) weka.core.SerializationHelper.read(TRAINING_FILE);
         // generate the test set
         Instances testSet = new Instances("Rel", fvWekaAttributes, 10);
-//        testSet.setClassIndex(2);
+//        testSet.setClassIndex(testSet.numAttributes()-1);
         // create the instance
-        Instance tempInstance = new DenseInstance(3);
+        Instance tempInstance = new DenseInstance(2);
         tempInstance.setValue((Attribute)fvWekaAttributes.elementAt(0),findPeaks(dataGry));
         tempInstance.setValue((Attribute)fvWekaAttributes.elementAt(1),findMax(dataArray_acc_y));
-        Evaluation eTest = new Evaluation(testSet);
-        String strSummary = eTest.toSummaryString();
-        Toast.makeText(getApplicationContext(),strSummary,0).show();
+        testSet.add(tempInstance);
+        double pred = model.classifyInstance(testSet.instance(0));
+        Toast.makeText(getApplicationContext(), (int) pred,0).show();
     }
 
     public void excute(){
@@ -285,9 +289,20 @@ public class MotionService extends Service implements SensorEventListener{
                         e.printStackTrace();
                     }
                 }
-                dataArray_acc_y.clear();
-                dataGry.clear();
+                reset();
             }
         }, 1000);
+    }
+
+    private void reset(){
+        dataArray_acc_y.clear();
+        dataGry.clear();
+        fvWekaAttributes.clear();
+        fvClassVal.clear();
+
+        fvWekaAttributes = new FastVector(3);
+        fvWekaAttributes.addElement(peakNum);
+        fvWekaAttributes.addElement(maxAccY);
+        fvWekaAttributes.addElement(classAttribute);
     }
 }
