@@ -17,6 +17,7 @@ import android.support.annotation.Nullable;
 import android.util.Log;
 import android.widget.Toast;
 
+import java.io.File;
 import java.util.ArrayList;
 import java.util.Locale;
 
@@ -51,7 +52,7 @@ public class MotionService extends Service implements SensorEventListener{
     TextToSpeech t1;
 //    SharedPreferences.Editor training_editor;
 //    SharedPreferences training_prefs;
-    public static final String TRAINING_FILE = "TrainingFile";
+//    public static final String TRAINING_FILE = "TrainingFile";
 
     BroadcastReceiver broadcastReceiver;
     boolean training_toggle = false;
@@ -61,6 +62,8 @@ public class MotionService extends Service implements SensorEventListener{
     FastVector fvClassVal, fvWekaAttributes;
     Instances trainingSet;
     int trainIdx = 0;
+    String path;
+    File training_file;
 
     @Override
     public void onCreate() {
@@ -83,6 +86,7 @@ public class MotionService extends Service implements SensorEventListener{
 
 //        training_editor = getSharedPreferences(TRAINING_FILE, MODE_PRIVATE).edit();
 //        training_prefs = getSharedPreferences(TRAINING_FILE, MODE_PRIVATE);
+//        training_editor.clear().commit();
 
         broadcastReceiver = new BroadcastReceiver() {
             @Override
@@ -93,6 +97,24 @@ public class MotionService extends Service implements SensorEventListener{
         };
         registerReceiver(broadcastReceiver, new IntentFilter(MainApp.BROADCAST_ACTION));
 
+        initialWekaVariable();
+        // declare the training set
+        trainingSet = new Instances("Rel", fvWekaAttributes, 10);
+        trainingSet.setClassIndex(trainingSet.numAttributes()-1);
+
+        training_file = new File(getApplicationContext().getExternalFilesDir(null) + File.separator + "training_file");
+        if( !training_file.exists() )
+            training_file.mkdirs();
+        else if( !training_file.isDirectory() && training_file.canWrite() ){
+            training_file.delete();
+            training_file.mkdirs();
+        }
+
+        path = training_file.getPath()+ File.separator+"training_model";
+        Log.v("path", path);
+    }
+
+    private void initialWekaVariable(){
         // declare attributes
         peakNum = new Attribute("peak number");
         maxAccY = new Attribute("max accY");
@@ -108,9 +130,6 @@ public class MotionService extends Service implements SensorEventListener{
         fvWekaAttributes.addElement(peakNum);
         fvWekaAttributes.addElement(maxAccY);
         fvWekaAttributes.addElement(classAttribute);
-        // declare the training set
-        trainingSet = new Instances("Rel", fvWekaAttributes, 10);
-        trainingSet.setClassIndex(2);
     }
 
     @Override
@@ -231,7 +250,7 @@ public class MotionService extends Service implements SensorEventListener{
                 tempInstance.setValue((Attribute)fvWekaAttributes.elementAt(2),"double outside");
                 break;
             case 3:
-                tempInstance.setValue((Attribute)fvWekaAttributes.elementAt(2),"single inside");
+                tempInstance.setValue((Attribute)fvWekaAttributes.elementAt(2),"double inside");
                 break;
         }
 
@@ -245,9 +264,13 @@ public class MotionService extends Service implements SensorEventListener{
         else{
             trainIdx=0;
             // create a classifier
-            Classifier model = new J48();
+//            Classifier model = new J48();
+            J48 model = new J48();
+            model.setUnpruned(true);
+            Log.v("trainingSet:", String.valueOf(trainingSet));
             model.buildClassifier(trainingSet);
-            weka.core.SerializationHelper.write(TRAINING_FILE, model);
+//            Log.v("training model:", String.valueOf(model));
+            weka.core.SerializationHelper.write(path, model);
             t1.speak("training complete", TextToSpeech.QUEUE_FLUSH, null);
             trainingSet.clear();
         }
@@ -255,17 +278,19 @@ public class MotionService extends Service implements SensorEventListener{
     }
 
     private void test() throws Exception{
-        Classifier model = (Classifier) weka.core.SerializationHelper.read(TRAINING_FILE);
-        // generate the test set
+        initialWekaVariable();
+        J48 model = (J48) weka.core.SerializationHelper.read(path);
         Instances testSet = new Instances("Rel", fvWekaAttributes, 10);
-//        testSet.setClassIndex(testSet.numAttributes()-1);
+        testSet.setClassIndex(testSet.numAttributes()-1);
         // create the instance
-        Instance tempInstance = new DenseInstance(2);
+        Instance tempInstance = new DenseInstance(3);
         tempInstance.setValue((Attribute)fvWekaAttributes.elementAt(0),findPeaks(dataGry));
         tempInstance.setValue((Attribute)fvWekaAttributes.elementAt(1),findMax(dataArray_acc_y));
         testSet.add(tempInstance);
-        double pred = model.classifyInstance(testSet.instance(0));
-        Toast.makeText(getApplicationContext(), (int) pred,0).show();
+        Log.v("testingSet", String.valueOf(testSet));
+        double idx = model.classifyInstance(testSet.instance(0));
+        String className = trainingSet.attribute(trainingSet.numAttributes()-1).value((int)idx);
+        Log.v("pred: ", String.valueOf(className));
     }
 
     public void excute(){
@@ -289,20 +314,9 @@ public class MotionService extends Service implements SensorEventListener{
                         e.printStackTrace();
                     }
                 }
-                reset();
+                dataArray_acc_y.clear();
+                dataGry.clear();
             }
         }, 1000);
-    }
-
-    private void reset(){
-        dataArray_acc_y.clear();
-        dataGry.clear();
-        fvWekaAttributes.clear();
-        fvClassVal.clear();
-
-        fvWekaAttributes = new FastVector(3);
-        fvWekaAttributes.addElement(peakNum);
-        fvWekaAttributes.addElement(maxAccY);
-        fvWekaAttributes.addElement(classAttribute);
     }
 }
