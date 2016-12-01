@@ -152,7 +152,7 @@ public class MotionService extends Service implements SensorEventListener{
             float delta = mGryCurrent - mGryLast;
             mGry = mGry * 0.9f + delta; // perform low-cut filter
 
-            if(mGry>=10) {
+            if(mGry>=7) {
                 if (!trigger) {
                     trigger = true;
                     excute();
@@ -239,26 +239,29 @@ public class MotionService extends Service implements SensorEventListener{
         Instance tempInstance = new DenseInstance(3);
         tempInstance.setValue((Attribute)fvWekaAttributes.elementAt(0),findPeaks(dataGry));
         tempInstance.setValue((Attribute)fvWekaAttributes.elementAt(1),findMax(dataArray_acc_y));
-        switch (trainIdx){
+        switch (trainIdx/5){
             case 0:
                 tempInstance.setValue((Attribute)fvWekaAttributes.elementAt(2),"single outside");
+                t1.speak("complete "+trainIdx+" single outside training", TextToSpeech.QUEUE_FLUSH, null);
                 break;
             case 1:
                 tempInstance.setValue((Attribute)fvWekaAttributes.elementAt(2),"single inside");
+                t1.speak("complete "+trainIdx+" single inside training", TextToSpeech.QUEUE_FLUSH, null);
                 break;
             case 2:
                 tempInstance.setValue((Attribute)fvWekaAttributes.elementAt(2),"double outside");
+                t1.speak("complete "+trainIdx+" double outside training", TextToSpeech.QUEUE_FLUSH, null);
                 break;
             case 3:
                 tempInstance.setValue((Attribute)fvWekaAttributes.elementAt(2),"double inside");
+                t1.speak("complete "+trainIdx+" double inside training", TextToSpeech.QUEUE_FLUSH, null);
                 break;
         }
 
         trainingSet.add(tempInstance);
+//        Log.v("trainingSet: ", String.valueOf(trainingSet));
 
-        t1.speak("training set "+trainIdx+" completed", TextToSpeech.QUEUE_FLUSH, null);
-
-        if(trainIdx<3){
+        if(trainIdx<19){
             trainIdx++;
         }
         else{
@@ -269,7 +272,7 @@ public class MotionService extends Service implements SensorEventListener{
             model.setUnpruned(true);
             Log.v("trainingSet:", String.valueOf(trainingSet));
             model.buildClassifier(trainingSet);
-//            Log.v("training model:", String.valueOf(model));
+            Log.v("training model:", String.valueOf(model));
             weka.core.SerializationHelper.write(path, model);
             t1.speak("training complete", TextToSpeech.QUEUE_FLUSH, null);
             trainingSet.clear();
