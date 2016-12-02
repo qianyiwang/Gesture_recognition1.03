@@ -152,7 +152,7 @@ public class MotionService extends Service implements SensorEventListener{
             float delta = mGryCurrent - mGryLast;
             mGry = mGry * 0.9f + delta; // perform low-cut filter
 
-            if(mGry>=7) {
+            if(mGry>=8) {
                 if (!trigger) {
                     trigger = true;
                     excute();
@@ -242,19 +242,19 @@ public class MotionService extends Service implements SensorEventListener{
         switch (trainIdx/5){
             case 0:
                 tempInstance.setValue((Attribute)fvWekaAttributes.elementAt(2),"single outside");
-                t1.speak("complete "+trainIdx+" single outside training", TextToSpeech.QUEUE_FLUSH, null);
+                t1.speak("complete "+(trainIdx+1)+" single outside training", TextToSpeech.QUEUE_FLUSH, null);
                 break;
             case 1:
                 tempInstance.setValue((Attribute)fvWekaAttributes.elementAt(2),"single inside");
-                t1.speak("complete "+trainIdx+" single inside training", TextToSpeech.QUEUE_FLUSH, null);
+                t1.speak("complete "+(trainIdx+1)+" single inside training", TextToSpeech.QUEUE_FLUSH, null);
                 break;
             case 2:
                 tempInstance.setValue((Attribute)fvWekaAttributes.elementAt(2),"double outside");
-                t1.speak("complete "+trainIdx+" double outside training", TextToSpeech.QUEUE_FLUSH, null);
+                t1.speak("complete "+(trainIdx+1)+" double outside training", TextToSpeech.QUEUE_FLUSH, null);
                 break;
             case 3:
                 tempInstance.setValue((Attribute)fvWekaAttributes.elementAt(2),"double inside");
-                t1.speak("complete "+trainIdx+" double inside training", TextToSpeech.QUEUE_FLUSH, null);
+                t1.speak("complete "+(trainIdx+1)+" double inside training", TextToSpeech.QUEUE_FLUSH, null);
                 break;
         }
 
@@ -293,6 +293,7 @@ public class MotionService extends Service implements SensorEventListener{
         Log.v("testingSet", String.valueOf(testSet));
         double idx = model.classifyInstance(testSet.instance(0));
         String className = trainingSet.attribute(trainingSet.numAttributes()-1).value((int)idx);
+        t1.speak(className, TextToSpeech.QUEUE_FLUSH, null);
         Log.v("pred: ", String.valueOf(className));
     }
 
