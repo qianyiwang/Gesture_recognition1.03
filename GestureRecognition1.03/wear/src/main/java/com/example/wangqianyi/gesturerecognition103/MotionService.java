@@ -10,6 +10,7 @@ import android.hardware.Sensor;
 import android.hardware.SensorEvent;
 import android.hardware.SensorEventListener;
 import android.hardware.SensorManager;
+import android.os.AsyncTask;
 import android.os.Handler;
 import android.os.IBinder;
 import android.speech.tts.TextToSpeech;
@@ -20,6 +21,7 @@ import android.widget.Toast;
 import java.io.File;
 import java.util.ArrayList;
 import java.util.Locale;
+import java.util.concurrent.ArrayBlockingQueue;
 
 import weka.classifiers.Classifier;
 import weka.classifiers.Evaluation;
@@ -47,7 +49,9 @@ public class MotionService extends Service implements SensorEventListener{
     private float yAccLast; // last acceleration including gravity
     boolean trigger = false;
     ArrayList<Float> dataArray_acc_y = new ArrayList();
-    ArrayList<Float> dataGry = new ArrayList();
+    // generate a buffer for 64 data
+    private static ArrayBlockingQueue<Double> mGryBuffer;
+    private CalculateFFT mAsyncTask;
 
     TextToSpeech t1;
 //    SharedPreferences.Editor training_editor;
@@ -85,10 +89,6 @@ public class MotionService extends Service implements SensorEventListener{
             }
         });
 
-//        training_editor = getSharedPreferences(TRAINING_FILE, MODE_PRIVATE).edit();
-//        training_prefs = getSharedPreferences(TRAINING_FILE, MODE_PRIVATE);
-//        training_editor.clear().commit();
-
         broadcastReceiver = new BroadcastReceiver() {
             @Override
             public void onReceive(Context context, Intent intent) {
@@ -98,6 +98,9 @@ public class MotionService extends Service implements SensorEventListener{
         };
         registerReceiver(broadcastReceiver, new IntentFilter(MainApp.BROADCAST_ACTION));
 
+        mGryBuffer = new ArrayBlockingQueue<Double>(64);
+
+        /*
         initialWekaVariable();
         // declare the training set
         trainingSet = new Instances("Rel", fvWekaAttributes, 10);
@@ -112,7 +115,7 @@ public class MotionService extends Service implements SensorEventListener{
         }
 
         path = training_file.getPath()+ File.separator+"training_model";
-        Log.v("path", path);
+        */
     }
 
     private void initialWekaVariable(){
@@ -138,6 +141,7 @@ public class MotionService extends Service implements SensorEventListener{
         super.onDestroy();
         mSensorManager.unregisterListener(this);
         unregisterReceiver(broadcastReceiver);
+        mAsyncTask.cancel(true);
         Toast.makeText(this,"stop motion service",0).show();
     }
 
@@ -153,22 +157,27 @@ public class MotionService extends Service implements SensorEventListener{
             float delta = mGryCurrent - mGryLast;
             mGry = mGry * 0.9f + delta; // perform low-cut filter
 
-            if(mGry>=8) {
-                if (!trigger) {
-                    trigger = true;
-                    excute();
-                }
+            try {
+                mGryBuffer.add(new Double(mGry));
+            } catch (IllegalStateException e) {
+
+                // Exception happens when reach the capacity.
+                // Doubling the buffer. ListBlockingQueue has no such issue,
+                // But generally has worse performance
+                ArrayBlockingQueue<Double> newBuf = new ArrayBlockingQueue<Double>(
+                        mGryBuffer.size() * 2);
+
+                mGryBuffer.drainTo(newBuf);
+                mGryBuffer = newBuf;
+                mGryBuffer.add(new Double(mGry));
             }
 
-            if(trigger){
-                dataGry.add(mGry);
-            }
         }
 
         if(event.sensor.getType() == Sensor.TYPE_LINEAR_ACCELERATION){
-            acc_x = event.values[0];
+//            acc_x = event.values[0];
             acc_y = event.values[1];
-            acc_z= event.values[2];
+//            acc_z= event.values[2];
 //            acc_y_lowpass = acc_y_lowpass * 0.8f + (1 - 0.8f) * event.values[1];
             yAccLast = yAccCurrent;
             yAccCurrent = acc_y;//(float) Math.sqrt(acc_x * acc_x + acc_y * acc_y + acc_z * acc_z);
@@ -182,6 +191,54 @@ public class MotionService extends Service implements SensorEventListener{
         }
     }
 
+    // calculate fft in AsyncTask
+    private class CalculateFFT extends AsyncTask<Void, Void, Void> {
+
+        @Override
+        protected Void doInBackground(Void... arg0) {
+            int blockSize = 0;
+            FFT fft = new FFT(64);
+            double[] gryBuffer = new double[64];
+            double[] mArr = new double[64];
+            double[] re = gryBuffer;
+            double[] im = new double[64];
+
+            double max = Double.MIN_VALUE;
+
+            while (true) {
+                try {
+                    // need to check if the AsyncTask is cancelled or not in the while loop
+                    if (isCancelled () == true)
+                    {
+                        return null;
+                    }
+
+                    // Dumping buffer
+                    double a = mGryBuffer.take().doubleValue();
+                    gryBuffer[blockSize++] = a;
+                    mArr[blockSize-1] = a;
+                    if (blockSize == 64) {
+                        blockSize = 0;
+
+                        fft.fft(re, im);
+                        for (int i = 0; i < re.length; i++) {
+                            double mag = Math.sqrt(re[i] * re[i] + im[i] * im[i]);
+                            Log.v("fft_v", String.valueOf(mag));
+                            Log.v("gry_m",mArr[i]+"");
+                            if(mag>300){
+
+                                publishProgress();
+                            }
+                            im[i] = .0; // Clear the field
+                        }
+                    }
+                } catch (Exception e) {
+                    e.printStackTrace();
+                }
+            }
+        }
+    }
+
     @Override
     public void onAccuracyChanged(Sensor sensor, int accuracy) {
 
@@ -192,6 +249,9 @@ public class MotionService extends Service implements SensorEventListener{
 
         Toast.makeText(this,"start motion service",0).show();
 
+        mAsyncTask = new CalculateFFT();
+        mAsyncTask.execute();
+
         return super.onStartCommand(intent, flags, startId);
     }
 
@@ -201,6 +261,7 @@ public class MotionService extends Service implements SensorEventListener{
         return null;
     }
 
+    // features extraction methods
     private int findPeaks(ArrayList<Float> dataArr){
         ArrayList<Float> bigVal = new ArrayList();
         ArrayList<Float> peakNum = new ArrayList();
@@ -233,7 +294,7 @@ public class MotionService extends Service implements SensorEventListener{
         return bigVal;
     }
 
-
+/*
     private void train() throws Exception{
 
         // create the instance
@@ -282,7 +343,7 @@ public class MotionService extends Service implements SensorEventListener{
     }
 
     private void test() throws Exception{
-        initialWekaVariable();
+//        initialWekaVariable();
         J48 model = (J48) weka.core.SerializationHelper.read(path);
         Instances testSet = new Instances("Rel", fvWekaAttributes, 10);
         testSet.setClassIndex(testSet.numAttributes()-1);
@@ -324,4 +385,6 @@ public class MotionService extends Service implements SensorEventListener{
             }
         }, 1000);
     }
+    */
+
 }
