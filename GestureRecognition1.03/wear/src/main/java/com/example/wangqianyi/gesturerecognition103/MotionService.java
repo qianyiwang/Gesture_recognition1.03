@@ -13,6 +13,7 @@ import android.hardware.SensorManager;
 import android.os.AsyncTask;
 import android.os.Handler;
 import android.os.IBinder;
+import android.os.Vibrator;
 import android.speech.tts.TextToSpeech;
 import android.support.annotation.Nullable;
 import android.util.Log;
@@ -48,12 +49,13 @@ public class MotionService extends Service implements SensorEventListener{
     private float yAccCurrent; // current acceleration including gravity
     private float yAccLast; // last acceleration including gravity
     boolean trigger = false;
-    ArrayList<Float> dataArray_acc_y = new ArrayList();
-    // generate a buffer for 64 data
+    // generate buffer for 64 data
     private static ArrayBlockingQueue<Double> mGryBuffer;
+    private static ArrayBlockingQueue<Double> mAccBuffer;
     private CalculateFFT mAsyncTask;
 
     TextToSpeech t1;
+    Vibrator vibrator;
 //    SharedPreferences.Editor training_editor;
 //    SharedPreferences training_prefs;
 //    public static final String TRAINING_FILE = "TrainingFile";
@@ -84,7 +86,6 @@ public class MotionService extends Service implements SensorEventListener{
             public void onInit(int status) {
                 if(status != TextToSpeech.ERROR) {
                     t1.setLanguage(Locale.US);
-                    t1.speak ("Hello World", TextToSpeech.QUEUE_FLUSH, null);
                 }
             }
         });
@@ -99,6 +100,8 @@ public class MotionService extends Service implements SensorEventListener{
         registerReceiver(broadcastReceiver, new IntentFilter(MainApp.BROADCAST_ACTION));
 
         mGryBuffer = new ArrayBlockingQueue<Double>(64);
+        mAccBuffer = new ArrayBlockingQueue<Double>(64);
+        vibrator = (Vibrator) getSystemService(Context.VIBRATOR_SERVICE);
 
         /*
         initialWekaVariable();
@@ -184,8 +187,19 @@ public class MotionService extends Service implements SensorEventListener{
             float delta = yAccCurrent - yAccLast;
             yAcc = yAcc * 0.9f + delta; // perform low-cut filter
 
-            if(trigger){
-                dataArray_acc_y.add(yAcc);
+            try {
+                mAccBuffer.add(new Double(yAcc));
+            } catch (IllegalStateException e) {
+
+                // Exception happens when reach the capacity.
+                // Doubling the buffer. ListBlockingQueue has no such issue,
+                // But generally has worse performance
+                ArrayBlockingQueue<Double> newBuf = new ArrayBlockingQueue<Double>(
+                        mAccBuffer.size() * 2);
+
+                mAccBuffer.drainTo(newBuf);
+                mAccBuffer = newBuf;
+                mAccBuffer.add(new Double(yAcc));
             }
 
         }
@@ -199,6 +213,7 @@ public class MotionService extends Service implements SensorEventListener{
             int blockSize = 0;
             FFT fft = new FFT(64);
             double[] gryBuffer = new double[64];
+            double[] accBuffer = new double[64];
             double[] mArr = new double[64];
             double[] re = gryBuffer;
             double[] im = new double[64];
@@ -215,19 +230,28 @@ public class MotionService extends Service implements SensorEventListener{
 
                     // Dumping buffer
                     double a = mGryBuffer.take().doubleValue();
-                    gryBuffer[blockSize++] = a;
-                    mArr[blockSize-1] = a;
+                    double b = mAccBuffer.take().doubleValue();
+                    gryBuffer[blockSize] = a;
+                    accBuffer[blockSize] = b;
+                    blockSize++;
                     if (blockSize == 64) {
                         blockSize = 0;
 
                         fft.fft(re, im);
+                        trigger = true;
                         for (int i = 0; i < re.length; i++) {
                             double mag = Math.sqrt(re[i] * re[i] + im[i] * im[i]);
-                            Log.v("fft_v", String.valueOf(mag));
-                            Log.v("gry_m",mArr[i]+"");
-                            if(mag>300){
-
-                                publishProgress();
+//                            Log.v("fft_v", String.valueOf(mag));
+//                            Log.v("acc_v",accBuffer[i]+"");
+                            if(mag>50&&trigger){
+                                if(checkIfOutside(accBuffer)){
+//                                    vibrator.vibrate(200);
+                                    Log.v("res:","single outside");
+                                }
+                                else{
+                                    Log.v("res:","single outside");
+                                }
+                                trigger = false;
                             }
                             im[i] = .0; // Clear the field
                         }
@@ -292,6 +316,16 @@ public class MotionService extends Service implements SensorEventListener{
         }
 
         return bigVal;
+    }
+
+    private boolean checkIfOutside(double[] dataArr){
+        for(double f: dataArr){
+            if(f>20){
+                return false;
+            }
+        }
+
+        return true;
     }
 
 /*
