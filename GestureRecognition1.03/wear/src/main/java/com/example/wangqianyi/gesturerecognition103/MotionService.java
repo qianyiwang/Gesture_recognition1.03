@@ -80,6 +80,7 @@ public class MotionService extends Service implements SensorEventListener{
             public void onInit(int status) {
                 if(status != TextToSpeech.ERROR) {
                     t1.setLanguage(Locale.US);
+                    t1.speak ("Hello World", TextToSpeech.QUEUE_FLUSH, null);
                 }
             }
         });
